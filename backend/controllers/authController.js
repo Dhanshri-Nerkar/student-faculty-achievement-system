@@ -31,8 +31,17 @@ export const sendOtp = async (req, res) => {
 
     res.json({ message: "OTP sent to email" });
   } catch (error) {
-    res.status(500).json({ message: "Error sending OTP" });
-  }
+  console.error("========== OTP ERROR ==========");
+  console.error(error);
+  console.error("EMAIL_USER:", process.env.EMAIL_USER);
+  console.error("EMAIL_PASS exists:", !!process.env.EMAIL_PASS);
+  console.error("===============================");
+
+  res.status(500).json({
+    message: "Error sending OTP",
+    error: error.message,
+  });
+}
 };
 
 // ================= REGISTER =================
