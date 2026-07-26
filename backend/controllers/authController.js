@@ -15,38 +15,43 @@ export const sendOtp = async (req, res) => {
 
   try {
     const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 587,
-  secure: false, // TLS
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-  connectionTimeout: 30000,
-  greetingTimeout: 30000,
-  socketTimeout: 30000,
-});
-
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: email,
-      subject: "OTP Verification",
-      text: `Your OTP is ${otp}`,
+      host: "smtp-relay.brevo.com",
+      port: 587,
+      secure: false,
+      auth: {
+        user: process.env.BREVO_USER,
+        pass: process.env.BREVO_PASS,
+      },
     });
 
-    res.json({ message: "OTP sent to email" });
-  } catch (error) {
-  console.error("========== OTP ERROR ==========");
-  console.error(error);
-  console.error("EMAIL_USER:", process.env.EMAIL_USER);
-  console.error("EMAIL_PASS exists:", !!process.env.EMAIL_PASS);
-  console.error("===============================");
+    await transporter.sendMail({
+      from: process.env.SENDER_EMAIL,
+      to: email,
+      subject: "OTP Verification - Student & Faculty Achievement System",
+      text: `Your OTP is ${otp}`,
+      html: `
+        <h2>OTP Verification</h2>
+        <p>Your OTP is:</p>
+        <h1>${otp}</h1>
+        <p>This OTP is valid for a short time.</p>
+      `,
+    });
 
-  res.status(500).json({
-    message: "Error sending OTP",
-    error: error.message,
-  });
-}
+    res.json({ message: "OTP sent successfully" });
+
+  } catch (error) {
+    console.error("========== OTP ERROR ==========");
+    console.error(error);
+    console.error("BREVO_USER:", process.env.BREVO_USER);
+    console.error("BREVO_PASS exists:", !!process.env.BREVO_PASS);
+    console.error("SENDER_EMAIL:", process.env.SENDER_EMAIL);
+    console.error("===============================");
+
+    res.status(500).json({
+      message: "Error sending OTP",
+      error: error.message,
+    });
+  }
 };
 
 // ================= REGISTER =================
