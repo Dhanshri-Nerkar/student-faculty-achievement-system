@@ -6,6 +6,7 @@ import nodemailer from "nodemailer";
 // temporary OTP store
 let otpStore = {};
 
+console.log("Sending OTP using Brevo...");
 // ================= SEND OTP =================
 export const sendOtp = async (req, res) => {
   const { email } = req.body;
@@ -16,7 +17,7 @@ export const sendOtp = async (req, res) => {
   try {
     const transporter = nodemailer.createTransport({
       host: "smtp-relay.brevo.com",
-      port: 587,
+      port: 465,
       secure: false,
       auth: {
         user: process.env.BREVO_USER,
@@ -53,6 +54,8 @@ export const sendOtp = async (req, res) => {
     });
   }
 };
+
+console.log("OTP sent successfully!");
 
 // ================= REGISTER =================
 export const registerUser = async (req, res) => {
