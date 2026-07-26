@@ -2,11 +2,11 @@ import User from "../models/User.js";
 import bcrypt from "bcryptjs";
 import generateToken from "../utils/generateToken.js";
 import nodemailer from "nodemailer";
+import SibApiV3Sdk from "@getbrevo/brevo";
 
 // temporary OTP store
 let otpStore = {};
 
-console.log("Sending OTP using Brevo...");
 // ================= SEND OTP =================
 export const sendOtp = async (req, res) => {
   const { email } = req.body;
@@ -15,38 +15,37 @@ export const sendOtp = async (req, res) => {
   otpStore[email] = otp;
 
   try {
-    const transporter = nodemailer.createTransport({
-      host: "smtp-relay.brevo.com",
-      port: 465,
-      secure: false,
-      auth: {
-        user: process.env.BREVO_USER,
-        pass: process.env.BREVO_PASS,
-      },
-    });
+    const defaultClient = SibApiV3Sdk.ApiClient.instance;
 
-    await transporter.sendMail({
-      from: process.env.SENDER_EMAIL,
-      to: email,
-      subject: "OTP Verification - Student & Faculty Achievement System",
-      text: `Your OTP is ${otp}`,
-      html: `
+    const apiKey = defaultClient.authentications["api-key"];
+    apiKey.apiKey = process.env.BREVO_API_KEY;
+
+    const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
+
+    await apiInstance.sendTransacEmail({
+      sender: {
+        email: process.env.SENDER_EMAIL,
+        name: "Student & Faculty Achievement System",
+      },
+      to: [
+        {
+          email: email,
+        },
+      ],
+      subject: "OTP Verification",
+      htmlContent: `
         <h2>OTP Verification</h2>
         <p>Your OTP is:</p>
         <h1>${otp}</h1>
-        <p>This OTP is valid for a short time.</p>
+        <p>This OTP is valid for 10 minutes.</p>
       `,
     });
 
-    res.json({ message: "OTP sent successfully" });
-
+    res.json({
+      message: "OTP sent successfully",
+    });
   } catch (error) {
-    console.error("========== OTP ERROR ==========");
-    console.error(error);
-    console.error("BREVO_USER:", process.env.BREVO_USER);
-    console.error("BREVO_PASS exists:", !!process.env.BREVO_PASS);
-    console.error("SENDER_EMAIL:", process.env.SENDER_EMAIL);
-    console.error("===============================");
+    console.error("BREVO API ERROR:", error);
 
     res.status(500).json({
       message: "Error sending OTP",
@@ -54,8 +53,6 @@ export const sendOtp = async (req, res) => {
     });
   }
 };
-
-console.log("OTP sent successfully!");
 
 // ================= REGISTER =================
 export const registerUser = async (req, res) => {
