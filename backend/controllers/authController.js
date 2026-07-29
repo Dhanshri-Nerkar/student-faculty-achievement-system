@@ -2,7 +2,7 @@ import User from "../models/User.js";
 import bcrypt from "bcryptjs";
 import generateToken from "../utils/generateToken.js";
 import nodemailer from "nodemailer";
-import * as brevo from "@getbrevo/brevo";
+import axios from "axios";
 
 // temporary OTP store
 let otpStore = {};
@@ -15,41 +15,46 @@ export const sendOtp = async (req, res) => {
   otpStore[email] = otp;
 
   try {
-    let apiInstance = new brevo.TransactionalEmailsApi();
-
-    apiInstance.setApiKey(
-      brevo.TransactionalEmailsApiApiKeys.apiKey,
-      process.env.BREVO_API_KEY
-    );
-
-    await apiInstance.sendTransacEmail({
-      sender: {
-        email: process.env.SENDER_EMAIL,
-        name: "Student & Faculty Achievement System",
-      },
-      to: [
-        {
-          email: email,
+    await axios.post(
+      "https://api.brevo.com/v3/smtp/email",
+      {
+        sender: {
+          name: "Student & Faculty Achievement System",
+          email: process.env.SENDER_EMAIL,
         },
-      ],
-      subject: "OTP Verification",
-      htmlContent: `
-        <h2>OTP Verification</h2>
-        <p>Your OTP is:</p>
-        <h1>${otp}</h1>
-        <p>This OTP is valid for 10 minutes.</p>
-      `,
-    });
+        to: [
+          {
+            email: email,
+          },
+        ],
+        subject: "OTP Verification",
+        htmlContent: `
+          <h2>OTP Verification</h2>
+          <p>Your OTP is:</p>
+          <h1>${otp}</h1>
+          <p>This OTP is valid for 10 minutes.</p>
+        `,
+      },
+      {
+        headers: {
+          "api-key": process.env.BREVO_API_KEY,
+          "Content-Type": "application/json",
+        },
+      }
+    );
 
     console.log("OTP sent successfully!");
 
     res.json({ message: "OTP sent successfully" });
   } catch (error) {
-    console.error("BREVO ERROR:", error);
+    console.error(
+      "BREVO API ERROR:",
+      error.response?.data || error.message
+    );
 
     res.status(500).json({
       message: "Error sending OTP",
-      error: error.message,
+      error: error.response?.data || error.message,
     });
   }
 };
