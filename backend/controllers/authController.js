@@ -2,7 +2,7 @@ import User from "../models/User.js";
 import bcrypt from "bcryptjs";
 import generateToken from "../utils/generateToken.js";
 import nodemailer from "nodemailer";
-import SibApiV3Sdk from "@getbrevo/brevo";
+import * as brevo from "@getbrevo/brevo";
 
 // temporary OTP store
 let otpStore = {};
@@ -15,12 +15,12 @@ export const sendOtp = async (req, res) => {
   otpStore[email] = otp;
 
   try {
-    const defaultClient = SibApiV3Sdk.ApiClient.instance;
+    let apiInstance = new brevo.TransactionalEmailsApi();
 
-    const apiKey = defaultClient.authentications["api-key"];
-    apiKey.apiKey = process.env.BREVO_API_KEY;
-
-    const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
+    apiInstance.setApiKey(
+      brevo.TransactionalEmailsApiApiKeys.apiKey,
+      process.env.BREVO_API_KEY
+    );
 
     await apiInstance.sendTransacEmail({
       sender: {
@@ -41,11 +41,11 @@ export const sendOtp = async (req, res) => {
       `,
     });
 
-    res.json({
-      message: "OTP sent successfully",
-    });
+    console.log("OTP sent successfully!");
+
+    res.json({ message: "OTP sent successfully" });
   } catch (error) {
-    console.error("BREVO API ERROR:", error);
+    console.error("BREVO ERROR:", error);
 
     res.status(500).json({
       message: "Error sending OTP",
