@@ -40,9 +40,7 @@ export const addAchievement = async (req, res) => {
       department: department || req.user.department || "",
 
       // ✅ CERTIFICATE
-      certificate: req.file
-        ? `http://localhost:5000/uploads/${req.file.filename}`
-        : "",
+      certificate: req.file ? req.file.path : "",
 
       status: "pending",
     });
@@ -115,7 +113,7 @@ export const updateAchievement = async (req, res) => {
 
     // ✅ if new certificate uploaded
     if (req.file) {
-      updateData.certificate = `http://localhost:5000/uploads/${req.file.filename}`;
+      updateData.certificate = req.file.path;
     }
 
     const updated = await Achievement.findByIdAndUpdate(
