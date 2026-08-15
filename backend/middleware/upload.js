@@ -6,8 +6,8 @@ const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: {
     folder: "student-faculty-achievements",
-    allowed_formats: ["jpg", "jpeg", "png", "pdf"],
-    resource_type: "auto",
+    allowed_formats: ["jpg", "jpeg", "png"],
+    resource_type: "image",
   },
 });
 

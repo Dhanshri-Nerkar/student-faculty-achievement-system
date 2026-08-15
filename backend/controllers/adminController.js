@@ -1,21 +1,62 @@
 import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
 import Achievement from "../models/Achievement.js";
-
 import path from "path";
 import { fileURLToPath } from "url";
+
+// ================= PATH SETUP =================
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// ================= EXCEL REPORT =================
+// ================= DOWNLOAD CLOUDINARY IMAGE =================
+
+const downloadImage = async (url) => {
+  try {
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to download image: ${response.status}`
+      );
+    }
+
+    const contentType =
+      response.headers.get("content-type") || "";
+
+    // Only image certificates are supported
+    if (!contentType.startsWith("image/")) {
+      throw new Error(
+        `Certificate is not an image: ${contentType}`
+      );
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+
+    return Buffer.from(arrayBuffer);
+
+  } catch (error) {
+    console.error(
+      "CERTIFICATE DOWNLOAD ERROR:",
+      error.message
+    );
+
+    return null;
+  }
+};
+
+// ============================================================
+// EXCEL REPORT
+// ============================================================
+
 export const downloadExcelReport = async (req, res) => {
   try {
     const { year } = req.query;
 
     const currentYear = new Date().getFullYear();
-
     const selectedYear = year || currentYear;
+
+    // ================= GET APPROVED DATA =================
 
     let data = await Achievement.find({
       status: "approved",
@@ -29,36 +70,55 @@ export const downloadExcelReport = async (req, res) => {
       },
     });
 
-    // SORT
+    // ================= STUDENTS FIRST =================
+
     data.sort((a, b) => {
       if (
         a.role === "student" &&
         b.role === "faculty"
-      )
+      ) {
         return -1;
+      }
 
       if (
         a.role === "faculty" &&
         b.role === "student"
-      )
+      ) {
         return 1;
+      }
 
       return 0;
     });
 
+    // ================= CREATE WORKBOOK =================
+
     const workbook = new ExcelJS.Workbook();
 
-    const worksheet =
-      workbook.addWorksheet("Achievements");
+    // ====================================================
+    // STUDENT SHEET
+    // ====================================================
 
-    worksheet.columns = [
-      { header: "Name", key: "name", width: 20 },
+    const studentWorksheet =
+      workbook.addWorksheet(
+        "Student Achievements"
+      );
 
-      { header: "Role", key: "role", width: 15 },
+    studentWorksheet.columns = [
+      {
+        header: "Name",
+        key: "name",
+        width: 20,
+      },
 
       {
-        header: "PRN / EmpID",
-        key: "id",
+        header: "Email",
+        key: "email",
+        width: 30,
+      },
+
+      {
+        header: "PRN",
+        key: "prn",
         width: 20,
       },
 
@@ -68,10 +128,20 @@ export const downloadExcelReport = async (req, res) => {
         width: 20,
       },
 
-      { header: "Event", key: "event", width: 25 },
+      {
+        header: "Class",
+        key: "class",
+        width: 15,
+      },
 
       {
-        header: "Achievement",
+        header: "Event",
+        key: "event",
+        width: 25,
+      },
+
+      {
+        header: "Achievement Type",
         key: "achievement",
         width: 30,
       },
@@ -79,103 +149,192 @@ export const downloadExcelReport = async (req, res) => {
       {
         header: "Description",
         key: "description",
-        width: 30,
+        width: 40,
+      },
+
+      {
+        header: "Details",
+        key: "details",
+        width: 40,
       },
 
       {
         header: "Certificate",
         key: "certificate",
+        width: 20,
+      },
+    ];
+
+    // ================= STUDENT DATA =================
+
+    const students = data.filter(
+      (item) => item.role === "student"
+    );
+
+    if (students.length === 0) {
+
+      studentWorksheet.addRow({
+        name: "No approved student achievements found",
+      });
+
+    } else {
+
+      students.forEach((item) => {
+
+        studentWorksheet.addRow({
+
+          name: item.name || "-",
+
+          email: item.email || "-",
+
+          prn: item.prn || "-",
+
+          department:
+            item.department || "-",
+
+          class:
+            item.class || "-",
+
+          event:
+            item.event || "-",
+
+          achievement:
+            item.achievementType || "-",
+
+          description:
+            item.description || "-",
+
+          details:
+            item.details || "-",
+
+          certificate: item.certificate
+            ? {
+                text: "View Certificate",
+                hyperlink: item.certificate,
+              }
+            : "No File",
+        });
+
+      });
+    }
+
+    // ====================================================
+    // FACULTY SHEET
+    // ====================================================
+
+    const facultyWorksheet =
+      workbook.addWorksheet(
+        "Faculty Achievements"
+      );
+
+    facultyWorksheet.columns = [
+
+      {
+        header: "Name",
+        key: "name",
+        width: 20,
+      },
+
+      {
+        header: "Email",
+        key: "email",
+        width: 30,
+      },
+
+      {
+        header: "Emp ID",
+        key: "empId",
+        width: 20,
+      },
+
+      {
+        header: "Department",
+        key: "department",
+        width: 20,
+      },
+
+      {
+        header: "Event",
+        key: "event",
+        width: 25,
+      },
+
+      {
+        header: "Achievement Type",
+        key: "achievement",
+        width: 30,
+      },
+
+      {
+        header: "Description",
+        key: "description",
         width: 40,
       },
 
-      { header: "Year", key: "year", width: 10 },
+      {
+        header: "Details",
+        key: "details",
+        width: 40,
+      },
+
+      {
+        header: "Certificate",
+        key: "certificate",
+        width: 20,
+      },
     ];
 
-    if (data.length === 0) {
-      worksheet.addRow({
-        name: "No data found",
-        year: selectedYear,
+    // ================= FACULTY DATA =================
+
+    const faculty = data.filter(
+      (item) => item.role === "faculty"
+    );
+
+    if (faculty.length === 0) {
+
+      facultyWorksheet.addRow({
+        name: "No approved faculty achievements found",
       });
+
     } else {
 
-      // ================= STUDENTS =================
+      faculty.forEach((item) => {
 
-      worksheet.addRow({
-        name: "=== STUDENT ACHIEVEMENTS ===",
-      });
+        facultyWorksheet.addRow({
 
-      data
-        .filter((item) => item.role === "student")
-        .forEach((item) => {
-          worksheet.addRow({
-            name: item.name,
+          name: item.name || "-",
 
-            role: item.role,
+          email: item.email || "-",
 
-            id: item.prn || "-",
+          empId: item.empId || "-",
 
-            department:
-              item.department || "-",
+          department:
+            item.department || "-",
 
-            event: item.event || "-",
+          event:
+            item.event || "-",
 
-            achievement:
-              item.achievementType || "-",
+          achievement:
+            item.achievementType || "-",
 
-            description:
-              item.description ||
-              item.details ||
-              "-",
+          description:
+            item.description || "-",
 
-            certificate:
-              item.certificate || "No File",
+          details:
+            item.details || "-",
 
-            year: new Date(
-              item.createdAt
-            ).getFullYear(),
-          });
+          certificate: item.certificate
+            ? {
+                text: "View Certificate",
+                hyperlink: item.certificate,
+              }
+            : "No File",
         });
 
-      // ================= FACULTY =================
-
-      worksheet.addRow({});
-
-      worksheet.addRow({
-        name: "=== FACULTY ACHIEVEMENTS ===",
       });
-
-      data
-        .filter((item) => item.role === "faculty")
-        .forEach((item) => {
-          worksheet.addRow({
-            name: item.name,
-
-            role: item.role,
-
-            id: item.empId || "-",
-
-            department:
-              item.department || "-",
-
-            event: item.event || "-",
-
-            achievement:
-              item.achievementType || "-",
-
-            description:
-              item.description ||
-              item.details ||
-              "-",
-
-            certificate:
-              item.certificate || "No File",
-
-            year: new Date(
-              item.createdAt
-            ).getFullYear(),
-          });
-        });
     }
+
+    // ================= RESPONSE =================
 
     res.setHeader(
       "Content-Type",
@@ -193,7 +352,10 @@ export const downloadExcelReport = async (req, res) => {
 
   } catch (error) {
 
-    console.error(error);
+    console.error(
+      "EXCEL ERROR:",
+      error
+    );
 
     res.status(500).json({
       message:
@@ -202,49 +364,70 @@ export const downloadExcelReport = async (req, res) => {
   }
 };
 
-// ================= PDF REPORT =================
+// ============================================================
+// PDF REPORT
+// ============================================================
+
 export const downloadPDFReport = async (req, res) => {
+
   try {
 
     const { year } = req.query;
 
-    const currentYear = new Date().getFullYear();
+    const currentYear =
+      new Date().getFullYear();
 
-    const selectedYear = year || currentYear;
+    const selectedYear =
+      year || currentYear;
+
+    // ================= GET APPROVED DATA =================
 
     let data = await Achievement.find({
+
       status: "approved",
 
       createdAt: {
-        $gte: new Date(`${selectedYear}-01-01`),
 
-        $lt: new Date(
-          `${Number(selectedYear) + 1}-01-01`
-        ),
+        $gte:
+          new Date(`${selectedYear}-01-01`),
+
+        $lt:
+          new Date(
+            `${Number(selectedYear) + 1}-01-01`
+          ),
       },
+
     });
 
-    // SORT
+    // ================= SORT =================
+
     data.sort((a, b) => {
 
       if (
         a.role === "student" &&
         b.role === "faculty"
-      )
+      ) {
         return -1;
+      }
 
       if (
         a.role === "faculty" &&
         b.role === "student"
-      )
+      ) {
         return 1;
+      }
 
       return 0;
     });
 
+    // ================= CREATE PDF =================
+
     const doc = new PDFDocument({
+
       margin: 40,
+
       size: "A4",
+
     });
 
     res.setHeader(
@@ -259,68 +442,85 @@ export const downloadPDFReport = async (req, res) => {
 
     doc.pipe(res);
 
-    // ================= LOGO =================
+    // ====================================================
+    // COLLEGE LOGO
+    // ====================================================
 
     const logoPath = path.join(
       __dirname,
-      "../uploads/logo svkm.jpg"
+      "../assets/logo-svkm.jpg"
     );
 
     try {
 
-      doc.image(logoPath, 50, 30, {
-        width: 70,
-      });
+      doc.image(
+        logoPath,
+        50,
+        30,
+        {
+          width: 70,
+        }
+      );
 
-    } catch (err) {
+    } catch (error) {
 
-      console.log("Logo not found");
+      console.error(
+        "COLLEGE LOGO ERROR:",
+        error.message
+      );
+
     }
 
-     // ================= HEADER =================
+    // ====================================================
+    // HEADER
+    // ====================================================
 
-doc
-  .fontSize(20)
-  .fillColor("blue")
-  .text(
-    "SVKM'S Institute of Technology, Dhule",
-    120,
-    40,
-    {
-      width: 350,
-      align: "center",
-    }
-  );
+    doc
+      .fontSize(20)
+      .fillColor("blue")
+      .text(
+        "SVKM'S Institute of Technology, Dhule",
+        40,
+        40,
+        {
+          width: 515,
+          align: "center",
+        }
+      );
 
-doc
-  .fontSize(14)
-  .fillColor("black")
-  .text(
-    "Student & Faculty Achievement Report",
-    120,
-    70,
-    {
-      width: 350,
-      align: "center",
-    }
-  );
+    doc
+      .fontSize(14)
+      .fillColor("black")
+      .text(
+        "Student & Faculty Achievement Report",
+        40,
+        70,
+        {
+          width: 515,
+          align: "center",
+        }
+      );
 
-doc
-  .fontSize(12)
-  .text(
-    `Academic Year: ${selectedYear}`,
-    120,
-    95,
-    {
-      width: 350,
-      align: "center",
-    }
-  );
+    doc
+      .fontSize(12)
+      .text(
+        `Academic Year: ${selectedYear}`,
+        40,
+        95,
+        {
+          width: 515,
+          align: "center",
+        }
+      );
 
-// ================= START CONTENT =================
+    // ================= START CONTENT =================
 
-doc.x = 40;
-doc.y = 150;
+    doc.x = 40;
+    doc.y = 150;
+
+    // ====================================================
+    // NO DATA
+    // ====================================================
 
     if (data.length === 0) {
 
@@ -331,24 +531,56 @@ doc.y = 150;
           "No approved achievements found."
         );
 
-    } else {
+      doc.end();
 
-      // ================= STUDENT SECTION =================
+      return;
+    }
 
-      doc
-        .fontSize(16)
-        .fillColor("green")
-        .text("STUDENT ACHIEVEMENTS", {
+    // ====================================================
+    // STUDENT ACHIEVEMENTS
+    // ====================================================
+
+    doc
+      .fontSize(16)
+      .fillColor("green")
+      .text(
+        "STUDENT ACHIEVEMENTS",
+        {
           align: "left",
-        });
-
-      doc.moveDown();
-
-      const students = data.filter(
-        (item) => item.role === "student"
+        }
       );
 
-      students.forEach((item, index) => {
+    doc.moveDown();
+
+    const students = data.filter(
+      (item) => item.role === "student"
+    );
+
+    if (students.length === 0) {
+
+      doc
+        .fontSize(12)
+        .fillColor("black")
+        .text(
+          "No approved student achievements found."
+        );
+
+      doc.moveDown(2);
+
+    } else {
+
+      for (
+        const [index, item]
+        of students.entries()
+      ) {
+
+        // ================= PAGE CHECK =================
+
+        if (doc.y > 650) {
+          doc.addPage();
+        }
+
+        // ================= TITLE =================
 
         doc
           .fontSize(14)
@@ -361,12 +593,28 @@ doc.y = 150;
 
         doc.moveDown(0.5);
 
+        // ================= STUDENT DETAILS =================
+
+        doc
+          .fontSize(11)
+          .fillColor("black");
+
         doc.text(
-          `Name: ${item.name || "-"}`
+          `Name: ${
+            item.name || "-"
+          }`
         );
 
         doc.text(
-          `PRN: ${item.prn || "-"}`
+          `Email: ${
+            item.email || "-"
+          }`
+        );
+
+        doc.text(
+          `PRN: ${
+            item.prn || "-"
+          }`
         );
 
         doc.text(
@@ -376,61 +624,107 @@ doc.y = 150;
         );
 
         doc.text(
-          `Achievement: ${
+          `Class: ${
+            item.class || "-"
+          }`
+        );
+
+        doc.text(
+          `Event: ${
+            item.event || "-"
+          }`
+        );
+
+        doc.text(
+          `Achievement Type: ${
             item.achievementType || "-"
           }`
         );
 
         doc.text(
           `Description: ${
-            item.description ||
-            item.details ||
-            "-"
+            item.description || "-"
+          }`
+        );
+
+        doc.text(
+          `Details: ${
+            item.details || "-"
           }`
         );
 
         doc.moveDown();
 
-        // ================= CERTIFICATE =================
+        // =================================================
+        // CERTIFICATE
+        // =================================================
 
         if (item.certificate) {
 
-          try {
+          doc
+            .fontSize(12)
+            .fillColor("blue")
+            .text("Certificate:");
 
-            const imagePath =
-              item.certificate.replace(
-                "http://localhost:5000",
-                "."
+          doc.moveDown(0.5);
+
+          const imageBuffer =
+            await downloadImage(
+              item.certificate
+            );
+
+          if (imageBuffer) {
+
+            try {
+
+              doc.image(
+                imageBuffer,
+                {
+                  fit: [250, 180],
+                  align: "left",
+                }
               );
 
-            doc
-              .fontSize(12)
-              .fillColor("blue")
-              .text("Certificate:");
+              doc.moveDown();
 
-            doc.moveDown(0.5);
+            } catch (error) {
 
-            doc.image(imagePath, {
-              fit: [250, 180],
-              align: "left",
-            });
+              console.error(
+                "PDF IMAGE ERROR:",
+                error.message
+              );
 
-            doc.moveDown();
+              doc
+                .fontSize(11)
+                .fillColor("red")
+                .text(
+                  "Certificate image could not be added."
+                );
+            }
 
-          } catch (err) {
+          } else {
 
             doc
               .fontSize(11)
               .fillColor("red")
               .text(
-                "Certificate image not found"
+                "Certificate image not available."
               );
           }
+
+        } else {
+
+          doc
+            .fontSize(11)
+            .fillColor("gray")
+            .text(
+              "No certificate uploaded."
+            );
         }
 
         doc.moveDown();
 
-        // ================= LINE =================
+        // ================= SEPARATOR =================
 
         doc
           .strokeColor("gray")
@@ -440,26 +734,45 @@ doc.y = 150;
           .stroke();
 
         doc.moveDown(2);
-      });
+      }
+    }
 
-      // ================= FACULTY SECTION =================
+    // ====================================================
+    // FACULTY ACHIEVEMENTS
+    // ====================================================
+
+    const faculty = data.filter(
+      (item) => item.role === "faculty"
+    );
+
+    if (faculty.length > 0) {
 
       doc.addPage();
 
       doc
         .fontSize(16)
         .fillColor("green")
-        .text("FACULTY ACHIEVEMENTS", {
-          align: "left",
-        });
+        .text(
+          "FACULTY ACHIEVEMENTS",
+          {
+            align: "left",
+          }
+        );
 
       doc.moveDown();
 
-      const faculty = data.filter(
-        (item) => item.role === "faculty"
-      );
+      for (
+        const [index, item]
+        of faculty.entries()
+      ) {
 
-      faculty.forEach((item, index) => {
+        // ================= PAGE CHECK =================
+
+        if (doc.y > 650) {
+          doc.addPage();
+        }
+
+        // ================= TITLE =================
 
         doc
           .fontSize(14)
@@ -472,12 +785,26 @@ doc.y = 150;
 
         doc.moveDown(0.5);
 
+        // ================= FACULTY DETAILS =================
+
+        doc
+          .fontSize(11)
+          .fillColor("black");
+
         doc.text(
-          `Name: ${item.name || "-"}`
+          `Name: ${
+            item.name || "-"
+          }`
         );
 
         doc.text(
-          `Employee ID: ${
+          `Email: ${
+            item.email || "-"
+          }`
+        );
+
+        doc.text(
+          `Emp ID: ${
             item.empId || "-"
           }`
         );
@@ -489,61 +816,101 @@ doc.y = 150;
         );
 
         doc.text(
-          `Achievement: ${
+          `Event: ${
+            item.event || "-"
+          }`
+        );
+
+        doc.text(
+          `Achievement Type: ${
             item.achievementType || "-"
           }`
         );
 
         doc.text(
           `Description: ${
-            item.description ||
-            item.details ||
-            "-"
+            item.description || "-"
+          }`
+        );
+
+        doc.text(
+          `Details: ${
+            item.details || "-"
           }`
         );
 
         doc.moveDown();
 
-        // ================= CERTIFICATE =================
+        // =================================================
+        // CERTIFICATE
+        // =================================================
 
         if (item.certificate) {
 
-          try {
+          doc
+            .fontSize(12)
+            .fillColor("blue")
+            .text("Certificate:");
 
-            const imagePath =
-              item.certificate.replace(
-                "http://localhost:5000",
-                "."
+          doc.moveDown(0.5);
+
+          const imageBuffer =
+            await downloadImage(
+              item.certificate
+            );
+
+          if (imageBuffer) {
+
+            try {
+
+              doc.image(
+                imageBuffer,
+                {
+                  fit: [250, 180],
+                  align: "left",
+                }
               );
 
-            doc
-              .fontSize(12)
-              .fillColor("blue")
-              .text("Certificate:");
+              doc.moveDown();
 
-            doc.moveDown(0.5);
+            } catch (error) {
 
-            doc.image(imagePath, {
-              fit: [250, 180],
-              align: "left",
-            });
+              console.error(
+                "PDF IMAGE ERROR:",
+                error.message
+              );
 
-            doc.moveDown();
+              doc
+                .fontSize(11)
+                .fillColor("red")
+                .text(
+                  "Certificate image could not be added."
+                );
+            }
 
-          } catch (err) {
+          } else {
 
             doc
               .fontSize(11)
               .fillColor("red")
               .text(
-                "Certificate image not found"
+                "Certificate image not available."
               );
           }
+
+        } else {
+
+          doc
+            .fontSize(11)
+            .fillColor("gray")
+            .text(
+              "No certificate uploaded."
+            );
         }
 
         doc.moveDown();
 
-        // ================= LINE =================
+        // ================= SEPARATOR =================
 
         doc
           .strokeColor("gray")
@@ -553,17 +920,26 @@ doc.y = 150;
           .stroke();
 
         doc.moveDown(2);
-      });
+      }
     }
+
+    // ================= FINISH PDF =================
 
     doc.end();
 
   } catch (error) {
 
-    console.error(error);
+    console.error(
+      "PDF REPORT ERROR:",
+      error
+    );
 
-    res.status(500).json({
-      message: "Error generating PDF report",
-    });
+    if (!res.headersSent) {
+
+      res.status(500).json({
+        message:
+          "Error generating PDF report",
+      });
+    }
   }
 };
