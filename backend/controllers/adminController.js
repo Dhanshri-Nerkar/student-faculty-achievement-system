@@ -296,10 +296,6 @@ export const downloadExcelReport = async (req, res) => {
 // PDF REPORT
 // =====================================================
 
-// =====================================================
-// PDF REPORT
-// =====================================================
-
 export const downloadPDFReport = async (req, res) => {
   try {
     const { year } = req.query;
@@ -324,17 +320,11 @@ export const downloadPDFReport = async (req, res) => {
     // =================================================
 
     data.sort((a, b) => {
-      if (
-        a.role === "student" &&
-        b.role === "faculty"
-      ) {
+      if (a.role === "student" && b.role === "faculty") {
         return -1;
       }
 
-      if (
-        a.role === "faculty" &&
-        b.role === "student"
-      ) {
+      if (a.role === "faculty" && b.role === "student") {
         return 1;
       }
 
@@ -342,12 +332,13 @@ export const downloadPDFReport = async (req, res) => {
     });
 
     // =================================================
-    // PDF DOCUMENT
+    // CREATE PDF
     // =================================================
 
     const doc = new PDFDocument({
-      margin: 40,
       size: "A4",
+      margin: 40,
+      bufferPages: true,
     });
 
     res.setHeader(
@@ -375,19 +366,8 @@ export const downloadPDFReport = async (req, res) => {
     const CONTENT_WIDTH =
       PAGE_WIDTH - LEFT_MARGIN - RIGHT_MARGIN;
 
-    // Two-column layout
-    const LEFT_WIDTH = 320;
-    const GAP = 20;
-    const RIGHT_WIDTH =
-      CONTENT_WIDTH - LEFT_WIDTH - GAP;
-
-    const RIGHT_X =
-      LEFT_MARGIN + LEFT_WIDTH + GAP;
-
-    const BOTTOM_MARGIN = 55;
-
     // =================================================
-    // HEADER
+    // REPORT HEADER
     // =================================================
 
     doc
@@ -428,43 +408,19 @@ export const downloadPDFReport = async (req, res) => {
         }
       );
 
-    // =================================================
-    // CONTENT START
-    // =================================================
-
-    doc.y = 150;
+    doc.y = 145;
 
     // =================================================
-    // EMPTY DATA
-    // =================================================
-
-    if (data.length === 0) {
-      doc
-        .fontSize(14)
-        .fillColor("red")
-        .text(
-          "No approved achievements found."
-        );
-
-      doc.end();
-      return;
-    }
-
-    // =================================================
-    // HELPER: SECTION TITLE
+    // SECTION TITLE
     // =================================================
 
     const addSectionTitle = (title) => {
-      // If section title is too close to bottom
-      if (
-        doc.y >
-        PAGE_HEIGHT - BOTTOM_MARGIN - 80
-      ) {
+      if (doc.y > 700) {
         doc.addPage();
       }
 
       doc
-        .fontSize(16)
+        .fontSize(17)
         .fillColor("green")
         .text(title, LEFT_MARGIN);
 
@@ -472,7 +428,24 @@ export const downloadPDFReport = async (req, res) => {
     };
 
     // =================================================
-    // HELPER: DRAW LABEL + VALUE
+    // FIELD HELPER
+    // =================================================
+
+    const getFieldHeight = (
+      label,
+      value,
+      width
+    ) => {
+      const text = `${label}: ${value || "-"}`;
+
+      return doc.heightOfString(text, {
+        width: width,
+        lineGap: 2,
+      });
+    };
+
+    // =================================================
+    // ADD FIELD
     // =================================================
 
     const addField = (
@@ -482,8 +455,7 @@ export const downloadPDFReport = async (req, res) => {
       y,
       width
     ) => {
-      const text =
-        `${label}: ${value || "-"}`;
+      const text = `${label}: ${value || "-"}`;
 
       doc
         .fontSize(10.5)
@@ -500,40 +472,69 @@ export const downloadPDFReport = async (req, res) => {
     };
 
     // =================================================
-    // HELPER: ADD CERTIFICATE
+    // CERTIFICATE BOX
     // =================================================
 
-    const addCertificate = async (
+    const addCertificateBox = async (
       certificate,
       x,
-      y
+      y,
+      width,
+      height
     ) => {
-      if (!certificate) {
-        return 0;
-      }
 
+      // Outer certificate box
       doc
-        .fontSize(11)
-        .fillColor("blue")
-        .text(
-          "Certificate",
+        .roundedRect(
           x,
           y,
+          width,
+          height,
+          6
+        )
+        .lineWidth(0.8)
+        .strokeColor("#999999")
+        .stroke();
+
+      // Certificate title
+      doc
+        .fontSize(10.5)
+        .fillColor("blue")
+        .text(
+          "CERTIFICATE",
+          x,
+          y + 10,
           {
-            width: RIGHT_WIDTH,
+            width: width,
+            align: "center",
           }
         );
 
-      const labelHeight =
-        doc.heightOfString(
-          "Certificate",
-          {
-            width: RIGHT_WIDTH,
-          }
-        );
+      const imageAreaX = x + 8;
+      const imageAreaY = y + 32;
 
-      const imageY =
-        y + labelHeight + 8;
+      const imageAreaWidth =
+        width - 16;
+
+      const imageAreaHeight =
+        height - 42;
+
+      if (!certificate) {
+        doc
+          .fontSize(9)
+          .fillColor("gray")
+          .text(
+            "No certificate uploaded",
+            imageAreaX,
+            imageAreaY + 40,
+            {
+              width: imageAreaWidth,
+              align: "center",
+            }
+          );
+
+        return;
+      }
 
       const imageBuffer =
         await downloadImage(certificate);
@@ -544,39 +545,34 @@ export const downloadPDFReport = async (req, res) => {
           .fillColor("red")
           .text(
             "Certificate image not available",
-            x,
-            imageY,
+            imageAreaX,
+            imageAreaY + 40,
             {
-              width: RIGHT_WIDTH,
+              width: imageAreaWidth,
+              align: "center",
             }
           );
 
-        return (
-          labelHeight + 30
-        );
+        return;
       }
 
       try {
         doc.image(
           imageBuffer,
-          x,
-          imageY,
+          imageAreaX,
+          imageAreaY,
           {
             fit: [
-              RIGHT_WIDTH,
-              210,
+              imageAreaWidth,
+              imageAreaHeight,
             ],
             align: "center",
             valign: "center",
           }
         );
-
-        return (
-          labelHeight + 225
-        );
       } catch (error) {
         console.error(
-          "PDF IMAGE ERROR:",
+          "CERTIFICATE IMAGE ERROR:",
           error.message
         );
 
@@ -584,144 +580,54 @@ export const downloadPDFReport = async (req, res) => {
           .fontSize(9)
           .fillColor("red")
           .text(
-            "Certificate image could not be added",
-            x,
-            imageY,
+            "Unable to display certificate",
+            imageAreaX,
+            imageAreaY + 40,
             {
-              width: RIGHT_WIDTH,
+              width: imageAreaWidth,
+              align: "center",
             }
           );
-
-        return (
-          labelHeight + 30
-        );
       }
     };
 
     // =================================================
-    // HELPER: ADD STUDENT ACHIEVEMENT
+    // STUDENT ACHIEVEMENT CARD
     // =================================================
 
     const addStudentAchievement = async (
       item,
       index
     ) => {
-      const startY = doc.y;
 
       // -------------------------------------------------
-      // Minimum space required for a new achievement
+      // COLUMN WIDTHS
       // -------------------------------------------------
 
-      if (
-        startY >
-        PAGE_HEIGHT - BOTTOM_MARGIN - 250
-      ) {
-        doc.addPage();
-      }
+      const cardX = LEFT_MARGIN;
 
-      const contentStartY = doc.y;
+      const cardWidth = CONTENT_WIDTH;
 
-      // -------------------------------------------------
-      // Achievement number
-      // -------------------------------------------------
+      const cardPadding = 15;
 
-      doc
-        .fontSize(13)
-        .fillColor("black")
-        .text(
-          `${index + 1}. ${
-            item.event || "-"
-          }`,
-          LEFT_MARGIN,
-          contentStartY,
-          {
-            width: CONTENT_WIDTH,
-          }
-        );
+      const leftWidth = 300;
 
-      doc.moveDown(0.8);
+      const dividerGap = 15;
 
-      const detailsStartY =
-        doc.y;
+      const rightWidth =
+        cardWidth -
+        cardPadding * 2 -
+        leftWidth -
+        dividerGap;
+
+      const rightX =
+        cardX +
+        cardPadding +
+        leftWidth +
+        dividerGap;
 
       // -------------------------------------------------
-      // LEFT COLUMN
-      // -------------------------------------------------
-
-      let leftY = detailsStartY;
-
-      leftY += addField(
-        "Name",
-        item.name,
-        LEFT_MARGIN,
-        leftY,
-        LEFT_WIDTH
-      );
-
-      leftY += 5;
-
-      leftY += addField(
-        "Email",
-        item.email,
-        LEFT_MARGIN,
-        leftY,
-        LEFT_WIDTH
-      );
-
-      leftY += 5;
-
-      leftY += addField(
-        "PRN",
-        item.prn,
-        LEFT_MARGIN,
-        leftY,
-        LEFT_WIDTH
-      );
-
-      leftY += 5;
-
-      leftY += addField(
-        "Department",
-        item.department,
-        LEFT_MARGIN,
-        leftY,
-        LEFT_WIDTH
-      );
-
-      leftY += 5;
-
-      leftY += addField(
-        "Class",
-        item.class,
-        LEFT_MARGIN,
-        leftY,
-        LEFT_WIDTH
-      );
-
-      leftY += 5;
-
-      leftY += addField(
-        "Event",
-        item.event,
-        LEFT_MARGIN,
-        leftY,
-        LEFT_WIDTH
-      );
-
-      leftY += 5;
-
-      leftY += addField(
-        "Achievement Type",
-        item.achievementType,
-        LEFT_MARGIN,
-        leftY,
-        LEFT_WIDTH
-      );
-
-      leftY += 5;
-
-      // -------------------------------------------------
-      // DESCRIPTION
+      // CALCULATE LEFT CONTENT HEIGHT
       // -------------------------------------------------
 
       const descriptionText =
@@ -729,108 +635,119 @@ export const downloadPDFReport = async (req, res) => {
           item.description || "-"
         }`;
 
-      doc
-        .fontSize(10.5)
-        .fillColor("black")
-        .text(
-          descriptionText,
-          LEFT_MARGIN,
-          leftY,
-          {
-            width: LEFT_WIDTH,
-            lineGap: 3,
-          }
-        );
+      let leftContentHeight = 0;
 
-      const descriptionHeight =
+      leftContentHeight +=
+        getFieldHeight(
+          "Name",
+          item.name,
+          leftWidth
+        ) + 5;
+
+      leftContentHeight +=
+        getFieldHeight(
+          "Email",
+          item.email,
+          leftWidth
+        ) + 5;
+
+      leftContentHeight +=
+        getFieldHeight(
+          "PRN",
+          item.prn,
+          leftWidth
+        ) + 5;
+
+      leftContentHeight +=
+        getFieldHeight(
+          "Department",
+          item.department,
+          leftWidth
+        ) + 5;
+
+      leftContentHeight +=
+        getFieldHeight(
+          "Class",
+          item.class,
+          leftWidth
+        ) + 5;
+
+      leftContentHeight +=
+        getFieldHeight(
+          "Event",
+          item.event,
+          leftWidth
+        ) + 5;
+
+      leftContentHeight +=
+        getFieldHeight(
+          "Achievement Type",
+          item.achievementType,
+          leftWidth
+        ) + 5;
+
+      leftContentHeight +=
         doc.heightOfString(
           descriptionText,
           {
-            width: LEFT_WIDTH,
+            width: leftWidth,
             lineGap: 3,
           }
         );
 
-      leftY += descriptionHeight;
-
       // -------------------------------------------------
-      // RIGHT COLUMN - CERTIFICATE
+      // CERTIFICATE HEIGHT
       // -------------------------------------------------
 
-      const certificateHeight =
-        await addCertificate(
-          item.certificate,
-          RIGHT_X,
-          detailsStartY
-        );
+      const certificateHeight = 220;
 
       // -------------------------------------------------
-      // DETERMINE END OF ACHIEVEMENT
+      // CARD HEIGHT
       // -------------------------------------------------
 
-      const contentEndY =
+      const titleHeight = 25;
+
+      const cardHeight =
         Math.max(
-          leftY,
-          detailsStartY +
-            certificateHeight
-        );
-
-      doc.y =
-        contentEndY + 15;
+          leftContentHeight,
+          certificateHeight
+        ) +
+        titleHeight +
+        cardPadding * 2;
 
       // -------------------------------------------------
-      // SEPARATOR
+      // PAGE CHECK
       // -------------------------------------------------
 
       if (
-        doc.y >
-        PAGE_HEIGHT - BOTTOM_MARGIN
+        doc.y + cardHeight >
+        PAGE_HEIGHT - 45
       ) {
         doc.addPage();
-      } else {
-        doc
-          .strokeColor("gray")
-          .lineWidth(0.7)
-          .moveTo(
-            LEFT_MARGIN,
-            doc.y
-          )
-          .lineTo(
-            PAGE_WIDTH - RIGHT_MARGIN,
-            doc.y
-          )
-          .stroke();
 
-        doc.moveDown(1.5);
-      }
-    };
-
-    // =================================================
-    // HELPER: ADD FACULTY ACHIEVEMENT
-    // =================================================
-
-    const addFacultyAchievement = async (
-      item,
-      index
-    ) => {
-      const startY = doc.y;
-
-      // -------------------------------------------------
-      // Minimum space for achievement
-      // -------------------------------------------------
-
-      if (
-        startY >
-        PAGE_HEIGHT - BOTTOM_MARGIN - 250
-      ) {
-        doc.addPage();
+        doc.y = 45;
       }
 
-      const contentStartY =
-        doc.y;
+      const cardY = doc.y;
 
       // -------------------------------------------------
-      // Achievement number
+      // OUTER CARD
+      // -------------------------------------------------
+
+      doc
+        .roundedRect(
+          cardX,
+          cardY,
+          cardWidth,
+          cardHeight,
+          8
+        )
+        .lineWidth(0.8)
+        .strokeColor("#B5B5B5")
+        .stroke();
+
+      // -------------------------------------------------
+      // ACHIEVEMENT TITLE
       // -------------------------------------------------
 
       doc
@@ -840,74 +757,184 @@ export const downloadPDFReport = async (req, res) => {
           `${index + 1}. ${
             item.event || "-"
           }`,
-          LEFT_MARGIN,
-          contentStartY,
+          cardX + cardPadding,
+          cardY + cardPadding,
           {
-            width: CONTENT_WIDTH,
+            width: cardWidth -
+              cardPadding * 2,
           }
         );
 
-      doc.moveDown(0.8);
-
-      const detailsStartY =
-        doc.y;
-
       // -------------------------------------------------
-      // LEFT COLUMN
+      // CONTENT START
       // -------------------------------------------------
 
-      let leftY =
-        detailsStartY;
+      const contentY =
+        cardY +
+        cardPadding +
+        titleHeight;
 
-      leftY += addField(
-        "Name",
-        item.name,
-        LEFT_MARGIN,
-        leftY,
-        LEFT_WIDTH
+      // -------------------------------------------------
+      // VERTICAL DIVIDER
+      // -------------------------------------------------
+
+      const dividerX =
+        cardX +
+        cardPadding +
+        leftWidth +
+        dividerGap / 2;
+
+      doc
+        .moveTo(
+          dividerX,
+          contentY
+        )
+        .lineTo(
+          dividerX,
+          cardY + cardHeight - cardPadding
+        )
+        .lineWidth(0.6)
+        .strokeColor("#D0D0D0")
+        .stroke();
+
+      // -------------------------------------------------
+      // LEFT CONTENT
+      // -------------------------------------------------
+
+      let leftY = contentY;
+
+      leftY +=
+        addField(
+          "Name",
+          item.name,
+          cardX + cardPadding,
+          leftY,
+          leftWidth
+        ) + 5;
+
+      leftY +=
+        addField(
+          "Email",
+          item.email,
+          cardX + cardPadding,
+          leftY,
+          leftWidth
+        ) + 5;
+
+      leftY +=
+        addField(
+          "PRN",
+          item.prn,
+          cardX + cardPadding,
+          leftY,
+          leftWidth
+        ) + 5;
+
+      leftY +=
+        addField(
+          "Department",
+          item.department,
+          cardX + cardPadding,
+          leftY,
+          leftWidth
+        ) + 5;
+
+      leftY +=
+        addField(
+          "Class",
+          item.class,
+          cardX + cardPadding,
+          leftY,
+          leftWidth
+        ) + 5;
+
+      leftY +=
+        addField(
+          "Event",
+          item.event,
+          cardX + cardPadding,
+          leftY,
+          leftWidth
+        ) + 5;
+
+      leftY +=
+        addField(
+          "Achievement Type",
+          item.achievementType,
+          cardX + cardPadding,
+          leftY,
+          leftWidth
+        ) + 5;
+
+      // -------------------------------------------------
+      // DESCRIPTION
+      // -------------------------------------------------
+
+      doc
+        .fontSize(10.5)
+        .fillColor("black")
+        .text(
+          descriptionText,
+          cardX + cardPadding,
+          leftY,
+          {
+            width: leftWidth,
+            lineGap: 3,
+          }
+        );
+
+      // -------------------------------------------------
+      // RIGHT CERTIFICATE
+      // -------------------------------------------------
+
+      await addCertificateBox(
+        item.certificate,
+        rightX,
+        contentY,
+        rightWidth,
+        certificateHeight
       );
 
-      leftY += 5;
+      // -------------------------------------------------
+      // MOVE BELOW CARD
+      // -------------------------------------------------
 
-      leftY += addField(
-        "Email",
-        item.email,
-        LEFT_MARGIN,
-        leftY,
-        LEFT_WIDTH
-      );
+      doc.y =
+        cardY +
+        cardHeight +
+        15;
+    };
 
-      leftY += 5;
+    // =================================================
+    // FACULTY ACHIEVEMENT CARD
+    // =================================================
 
-      leftY += addField(
-        "Employee ID",
-        item.empId,
-        LEFT_MARGIN,
-        leftY,
-        LEFT_WIDTH
-      );
+    const addFacultyAchievement = async (
+      item,
+      index
+    ) => {
 
-      leftY += 5;
+      const cardX = LEFT_MARGIN;
 
-      leftY += addField(
-        "Department",
-        item.department,
-        LEFT_MARGIN,
-        leftY,
-        LEFT_WIDTH
-      );
+      const cardWidth = CONTENT_WIDTH;
 
-      leftY += 5;
+      const cardPadding = 15;
 
-      leftY += addField(
-        "Event",
-        item.event,
-        LEFT_MARGIN,
-        leftY,
-        LEFT_WIDTH
-      );
+      const leftWidth = 300;
 
-      leftY += 5;
+      const dividerGap = 15;
+
+      const rightWidth =
+        cardWidth -
+        cardPadding * 2 -
+        leftWidth -
+        dividerGap;
+
+      const rightX =
+        cardX +
+        cardPadding +
+        leftWidth +
+        dividerGap;
 
       // -------------------------------------------------
       // DETAILS
@@ -918,93 +945,252 @@ export const downloadPDFReport = async (req, res) => {
           item.details || "-"
         }`;
 
+      let leftContentHeight = 0;
+
+      leftContentHeight +=
+        getFieldHeight(
+          "Name",
+          item.name,
+          leftWidth
+        ) + 5;
+
+      leftContentHeight +=
+        getFieldHeight(
+          "Email",
+          item.email,
+          leftWidth
+        ) + 5;
+
+      leftContentHeight +=
+        getFieldHeight(
+          "Employee ID",
+          item.empId,
+          leftWidth
+        ) + 5;
+
+      leftContentHeight +=
+        getFieldHeight(
+          "Department",
+          item.department,
+          leftWidth
+        ) + 5;
+
+      leftContentHeight +=
+        getFieldHeight(
+          "Event",
+          item.event,
+          leftWidth
+        ) + 5;
+
+      leftContentHeight +=
+        doc.heightOfString(
+          detailsText,
+          {
+            width: leftWidth,
+            lineGap: 3,
+          }
+        );
+
+      // -------------------------------------------------
+      // CARD HEIGHT
+      // -------------------------------------------------
+
+      const certificateHeight = 220;
+
+      const titleHeight = 25;
+
+      const cardHeight =
+        Math.max(
+          leftContentHeight,
+          certificateHeight
+        ) +
+        titleHeight +
+        cardPadding * 2;
+
+      // -------------------------------------------------
+      // PAGE CHECK
+      // -------------------------------------------------
+
+      if (
+        doc.y + cardHeight >
+        PAGE_HEIGHT - 45
+      ) {
+        doc.addPage();
+
+        doc.y = 45;
+      }
+
+      const cardY = doc.y;
+
+      // -------------------------------------------------
+      // OUTER CARD
+      // -------------------------------------------------
+
+      doc
+        .roundedRect(
+          cardX,
+          cardY,
+          cardWidth,
+          cardHeight,
+          8
+        )
+        .lineWidth(0.8)
+        .strokeColor("#B5B5B5")
+        .stroke();
+
+      // -------------------------------------------------
+      // TITLE
+      // -------------------------------------------------
+
+      doc
+        .fontSize(13)
+        .fillColor("black")
+        .text(
+          `${index + 1}. ${
+            item.event || "-"
+          }`,
+          cardX + cardPadding,
+          cardY + cardPadding,
+          {
+            width:
+              cardWidth -
+              cardPadding * 2,
+          }
+        );
+
+      // -------------------------------------------------
+      // CONTENT START
+      // -------------------------------------------------
+
+      const contentY =
+        cardY +
+        cardPadding +
+        titleHeight;
+
+      // -------------------------------------------------
+      // DIVIDER
+      // -------------------------------------------------
+
+      const dividerX =
+        cardX +
+        cardPadding +
+        leftWidth +
+        dividerGap / 2;
+
+      doc
+        .moveTo(
+          dividerX,
+          contentY
+        )
+        .lineTo(
+          dividerX,
+          cardY + cardHeight - cardPadding
+        )
+        .lineWidth(0.6)
+        .strokeColor("#D0D0D0")
+        .stroke();
+
+      // -------------------------------------------------
+      // LEFT CONTENT
+      // -------------------------------------------------
+
+      let leftY = contentY;
+
+      leftY +=
+        addField(
+          "Name",
+          item.name,
+          cardX + cardPadding,
+          leftY,
+          leftWidth
+        ) + 5;
+
+      leftY +=
+        addField(
+          "Email",
+          item.email,
+          cardX + cardPadding,
+          leftY,
+          leftWidth
+        ) + 5;
+
+      leftY +=
+        addField(
+          "Employee ID",
+          item.empId,
+          cardX + cardPadding,
+          leftY,
+          leftWidth
+        ) + 5;
+
+      leftY +=
+        addField(
+          "Department",
+          item.department,
+          cardX + cardPadding,
+          leftY,
+          leftWidth
+        ) + 5;
+
+      leftY +=
+        addField(
+          "Event",
+          item.event,
+          cardX + cardPadding,
+          leftY,
+          leftWidth
+        ) + 5;
+
+      // -------------------------------------------------
+      // DETAILS
+      // -------------------------------------------------
+
       doc
         .fontSize(10.5)
         .fillColor("black")
         .text(
           detailsText,
-          LEFT_MARGIN,
+          cardX + cardPadding,
           leftY,
           {
-            width: LEFT_WIDTH,
+            width: leftWidth,
             lineGap: 3,
           }
         );
 
-      const detailsHeight =
-        doc.heightOfString(
-          detailsText,
-          {
-            width: LEFT_WIDTH,
-            lineGap: 3,
-          }
-        );
-
-      leftY += detailsHeight;
-
       // -------------------------------------------------
-      // RIGHT COLUMN - CERTIFICATE
+      // CERTIFICATE
       // -------------------------------------------------
 
-      const certificateHeight =
-        await addCertificate(
-          item.certificate,
-          RIGHT_X,
-          detailsStartY
-        );
+      await addCertificateBox(
+        item.certificate,
+        rightX,
+        contentY,
+        rightWidth,
+        certificateHeight
+      );
 
       // -------------------------------------------------
-      // END OF ACHIEVEMENT
+      // MOVE BELOW CARD
       // -------------------------------------------------
-
-      const contentEndY =
-        Math.max(
-          leftY,
-          detailsStartY +
-            certificateHeight
-        );
 
       doc.y =
-        contentEndY + 15;
-
-      // -------------------------------------------------
-      // SEPARATOR
-      // -------------------------------------------------
-
-      if (
-        doc.y >
-        PAGE_HEIGHT - BOTTOM_MARGIN
-      ) {
-        doc.addPage();
-      } else {
-        doc
-          .strokeColor("gray")
-          .lineWidth(0.7)
-          .moveTo(
-            LEFT_MARGIN,
-            doc.y
-          )
-          .lineTo(
-            PAGE_WIDTH - RIGHT_MARGIN,
-            doc.y
-          )
-          .stroke();
-
-        doc.moveDown(1.5);
-      }
+        cardY +
+        cardHeight +
+        15;
     };
 
     // =================================================
-    // STUDENT ACHIEVEMENTS
+    // STUDENTS
     // =================================================
 
-    const students =
-      data.filter(
-        (item) =>
-          item.role === "student"
-      );
+    const students = data.filter(
+      (item) =>
+        item.role === "student"
+    );
 
     if (students.length > 0) {
+
       addSectionTitle(
         "STUDENT ACHIEVEMENTS"
       );
@@ -1022,19 +1208,20 @@ export const downloadPDFReport = async (req, res) => {
     }
 
     // =================================================
-    // FACULTY ACHIEVEMENTS
+    // FACULTY
     // =================================================
 
-    const faculty =
-      data.filter(
-        (item) =>
-          item.role === "faculty"
-      );
+    const faculty = data.filter(
+      (item) =>
+        item.role === "faculty"
+    );
 
     if (faculty.length > 0) {
 
-      // Start faculty on a fresh page
+      // Faculty starts on a new page
       doc.addPage();
+
+      doc.y = 45;
 
       addSectionTitle(
         "FACULTY ACHIEVEMENTS"
@@ -1053,12 +1240,29 @@ export const downloadPDFReport = async (req, res) => {
     }
 
     // =================================================
-    // FINISH PDF
+    // NO DATA
+    // =================================================
+
+    if (
+      students.length === 0 &&
+      faculty.length === 0
+    ) {
+      doc
+        .fontSize(14)
+        .fillColor("red")
+        .text(
+          "No approved achievements found."
+        );
+    }
+
+    // =================================================
+    // END PDF
     // =================================================
 
     doc.end();
 
   } catch (error) {
+
     console.error(
       "PDF REPORT ERROR:",
       error
